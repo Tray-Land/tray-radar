@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TrayRadar (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "TrayRadar (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

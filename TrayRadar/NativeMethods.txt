@@ -1,0 +1,14 @@
+APPBARDATA
+DwmSetWindowAttribute
+DWM_WINDOW_CORNER_PREFERENCE
+GetAncestor
+GetClassName
+GetCursorPos
+GetDpiForMonitor
+GetForegroundWindow
+MonitorFromPoint
+NOTIFYICONIDENTIFIER
+SetForegroundWindow
+SHAppBarMessage
+Shell_NotifyIconGetRect
+AllowSetForegroundWindow

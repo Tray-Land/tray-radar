@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.pfx
+AppPackages/
+BundleArtifacts/
+# Holds the Azure Maps key; copy OAuth.resw.sample to create it.
+TrayRadar/OAuth.resw

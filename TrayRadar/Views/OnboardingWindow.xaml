@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ex:WindowEx
+    x:Class="TrayRadar.Views.OnboardingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:TrayRadar.Controls"
+    xmlns:ex="using:WinUIEx"
+    Title="Welcome to Tray Radar"
+    IsMaximizable="False"
+    IsMinimizable="False"
+    IsResizable="False">
+
+    <ex:WindowEx.SystemBackdrop>
+        <MicaBackdrop />
+    </ex:WindowEx.SystemBackdrop>
+
+    <Grid Padding="28,24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="6">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Welcome to Tray Radar" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Click the radar icon in your system tray anytime to see live weather radar from the National Weather Service."
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <InfoBar
+            Title="United States only"
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="True"
+            Message="Tray Radar currently works only in the contiguous United States (the lower 48 states). Radar isn't available for other locations yet."
+            Severity="Warning" />
+
+        <TextBlock
+            Grid.Row="2"
+            Style="{StaticResource BodyStrongTextBlockStyle}"
+            Text="Where should the radar center?" />
+
+        <controls:LocationPicker
+            x:Name="Picker"
+            Grid.Row="3"
+            LocationChosen="Picker_LocationChosen" />
+
+        <Button
+            x:Name="FinishButton"
+            Grid.Row="4"
+            HorizontalAlignment="Right"
+            Click="FinishButton_Click"
+            Content="Show my radar"
+            IsEnabled="False"
+            Style="{StaticResource AccentButtonStyle}" />
+    </Grid>
+</ex:WindowEx>

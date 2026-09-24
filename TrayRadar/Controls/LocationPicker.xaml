@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="TrayRadar.Controls.LocationPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel Spacing="12">
+        <Button
+            x:Name="DeviceButton"
+            HorizontalAlignment="Stretch"
+            Click="DeviceButton_Click"
+            AutomationProperties.Name="Use my device location">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon FontSize="16" Glyph="&#xE81D;" />
+                <TextBlock Text="Use my device location" />
+            </StackPanel>
+        </Button>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+                x:Name="ZipBox"
+                AutomationProperties.Name="US ZIP code"
+                InputScope="Number"
+                KeyDown="ZipBox_KeyDown"
+                MaxLength="5"
+                PlaceholderText="Or enter a US ZIP code" />
+            <Button
+                x:Name="ZipButton"
+                Grid.Column="1"
+                Click="ZipButton_Click"
+                Content="Use ZIP" />
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <ProgressRing
+                x:Name="Busy"
+                Width="16"
+                Height="16"
+                IsActive="False"
+                Visibility="Collapsed" />
+            <TextBlock
+                x:Name="StatusText"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextWrapping="Wrap" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>
