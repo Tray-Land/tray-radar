@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Regenerates TrayRadar/Assets/Data/zcta.csv from the US Census ZCTA Gazetteer.
+    Regenerates Assets/Data/zcta.csv from the US Census ZCTA Gazetteer.
 .DESCRIPTION
     Downloads the national ZCTA Gazetteer file, keeps only ZIP code tabulation
     areas inside the contiguous United States, and writes a compact
@@ -8,7 +8,7 @@
 #>
 param(
     [string]$Year = '2025',
-    [string]$OutFile = (Join-Path $PSScriptRoot '..\TrayRadar\Assets\Data\zcta.csv')
+    [string]$OutFile = (Join-Path $PSScriptRoot '..\Assets\Data\zcta.csv')
 )
 
 $ErrorActionPreference = 'Stop'
