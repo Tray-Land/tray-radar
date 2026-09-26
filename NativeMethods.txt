@@ -12,3 +12,4 @@ SetForegroundWindow
 SHAppBarMessage
 Shell_NotifyIconGetRect
 AllowSetForegroundWindow
+RegNotifyChangeKeyValue

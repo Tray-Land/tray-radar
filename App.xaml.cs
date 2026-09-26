@@ -98,12 +98,16 @@ public partial class App : Application
 
     private void InitializeTrayIcon()
     {
-        _trayIcon = new TrayIcon(1, "Assets/AppIcon.ico", "Tray Radar");
+        _trayIcon = new TrayIcon(1, TrayIconPath, "Tray Radar");
         _trayIcon.Selected += (_, _) => ToggleFlyout();
         _trayIcon.ContextMenu += TrayIcon_ContextMenu;
         _trayIcon.IsVisible = true;
         WindowPlacementService.SetTrayIcon(_trayIcon);
+        SystemThemeService.Changed += (_, _) => _dispatcher?.TryEnqueue(() => _trayIcon?.SetIcon(TrayIconPath));
     }
+
+    // The white glyph disappears on a light taskbar, which follows the Windows theme, not the app theme.
+    private static string TrayIconPath => SystemThemeService.IsLight ? "Assets/AppIcon-dark.ico" : "Assets/AppIcon.ico";
 
     private void TrayIcon_ContextMenu(TrayIcon sender, TrayIconEventArgs args)
     {
