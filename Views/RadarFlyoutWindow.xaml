@@ -16,10 +16,26 @@
             <KeyboardAccelerator Key="Escape" Invoked="Escape_Invoked" />
         </Grid.KeyboardAccelerators>
 
+        <Grid.Resources>
+            <Storyboard x:Name="MapCoverFadeOut" Completed="MapCoverFadeOut_Completed">
+                <DoubleAnimation
+                    Storyboard.TargetName="MapCover"
+                    Storyboard.TargetProperty="Opacity"
+                    To="0"
+                    Duration="0:0:0.3" />
+            </Storyboard>
+        </Grid.Resources>
+
         <map:MapControl
             x:Name="Map"
             AutomationProperties.Name="Weather radar map"
             MapStyle="Road" />
+
+        <!--  Hides the map's light-gray clear color until the basemap's first tiles arrive  -->
+        <Border
+            x:Name="MapCover"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            IsHitTestVisible="False" />
 
         <StackPanel Margin="8" VerticalAlignment="Top" Spacing="6">
             <!--  Toolbar  -->
@@ -39,11 +55,20 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
-                        <Ellipse
-                            x:Name="LiveDot"
-                            Width="8"
-                            Height="8"
-                            Fill="{ThemeResource SystemFillColorSuccessBrush}" />
+                        <Grid Width="8" Height="8">
+                            <Ellipse x:Name="LiveDot" Fill="{ThemeResource SystemFillColorSuccessBrush}" />
+                            <!--  Negative margin lets the ring circle the dot without shifting the text  -->
+                            <ProgressRing
+                                x:Name="LoadingRing"
+                                Width="16"
+                                Height="16"
+                                MinWidth="16"
+                                MinHeight="16"
+                                Margin="-4"
+                                AutomationProperties.Name="Loading radar data"
+                                IsActive="False"
+                                IsIndeterminate="True" />
+                        </Grid>
                         <TextBlock
                             x:Name="FrameTimeText"
                             VerticalAlignment="Center"
@@ -58,7 +83,7 @@
                         Click="PlayButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}"
                         ToolTipService.ToolTip="Play loop">
-                        <FontIcon x:Name="PlayIcon" Glyph="&#xE768;" />
+                        <FontIcon FontSize="16" x:Name="PlayIcon" Glyph="&#xE768;" />
                     </Button>
                     <Button
                         Grid.Column="2"
@@ -66,7 +91,7 @@
                         Click="RecenterButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}"
                         ToolTipService.ToolTip="Go to default view">
-                        <FontIcon Glyph="&#xE80F;" />
+                        <FontIcon FontSize="16" Glyph="&#xE80F;" />
                     </Button>
                     <Button
                         Grid.Column="3"
@@ -74,7 +99,7 @@
                         Click="SaveViewButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}"
                         ToolTipService.ToolTip="Save this view as default">
-                        <FontIcon x:Name="SaveViewIcon" Glyph="&#xE718;" />
+                        <FontIcon FontSize="16" x:Name="SaveViewIcon" Glyph="&#xE718;" />
                     </Button>
                     <Button
                         Grid.Column="4"
@@ -82,10 +107,18 @@
                         Click="SettingsButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}"
                         ToolTipService.ToolTip="Settings">
-                        <FontIcon Glyph="&#xE713;" />
+                        <FontIcon FontSize="16" Glyph="&#xE713;" />
                     </Button>
                 </Grid>
             </Border>
+
+            <!--  Shown when radar data can't be fetched (offline or service down)  -->
+            <InfoBar
+                x:Name="ConnectionBar"
+                IsClosable="False"
+                IsOpen="False"
+                Severity="Warning"
+                Title="No internet connection" />
 
             <!--  Frame scrubber: shown while the loop plays or a past frame is selected  -->
             <Border

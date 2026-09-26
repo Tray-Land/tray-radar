@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -17,6 +18,7 @@ using Windows.Win32.UI.WindowsAndMessaging;
 using WinRT.Interop;
 using WinUIEx;
 using WinUIEx.Maps;
+using MapControl = WinUIEx.Maps.MapControl;
 using MapElementsLayer = WinUIEx.Maps.MapElementsLayer;
 using MapIcon = WinUIEx.Maps.MapIcon;
 
@@ -33,6 +35,10 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private static readonly TimeSpan RecentDismissWindow = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan DeviceLocationRefresh = TimeSpan.FromMinutes(15);
 
+    // The first open keeps the map covered until its first tiles are drawn (see WaitForFirstMapFrameAsync).
+    private static readonly TimeSpan MapRevealTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MapRevealFallbackDelay = TimeSpan.FromMilliseconds(2500);
+
     private readonly HWND _hwnd;
     private readonly DispatcherQueueTimer _hideTimer;
     private readonly DispatcherQueueTimer _savedTickTimer;
@@ -43,6 +49,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private bool _isShowing;
     private bool _allowClose;
     private bool _syncingFrameSlider;
+    private bool _mapRevealStarted;
     private DateTime _lastDismissedAtUtc;
     private DateTime _lastDeviceLocationUtc;
 
@@ -78,6 +85,8 @@ public sealed partial class RadarFlyoutWindow : WindowEx
 
         _radar = new RadarAnimator(Map);
         _radar.FrameChanged += (_, time) => UpdateFrameText(time);
+        _radar.StateChanged += (_, _) => UpdateStatus();
+        ConnectivityService.NetworkStatusChanged += OnNetworkStatusChanged;
         Map.Layers.Add(_pinLayer);
 
         Root.ActualThemeChanged += (_, _) => ApplyMapStyle();
@@ -118,6 +127,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         Activate();
         PInvoke.SetForegroundWindow(_hwnd);
         Map.Focus(FocusState.Programmatic);
+        RevealMapOnFirstShow();
 
         await _radar.ActivateAsync();
         RefreshDeviceLocationIfStale();
@@ -142,6 +152,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     {
         _allowClose = true;
         SettingsService.MapSettingsChanged -= OnMapSettingsChanged;
+        ConnectivityService.NetworkStatusChanged -= OnNetworkStatusChanged;
         _radar.Deactivate();
         Close();
     }
@@ -261,6 +272,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         if (Secrets.AzureMapsKey is null)
         {
             Map.MapStyle = MapStyle.Blank;
+            MapCover.RequestedTheme = ElementTheme.Light;
             return;
         }
 
@@ -273,7 +285,54 @@ public sealed partial class RadarFlyoutWindow : WindowEx
             BasemapStyle.Satellite => MapStyle.SatelliteWithRoads,
             _ => dark ? MapStyle.Night : MapStyle.Road,
         };
+
+        // Match the cover to the basemap's overall tone so the reveal doesn't flash either way.
+        bool darkMap = Map.MapStyle is MapStyle.Night or MapStyle.GrayscaleDark or MapStyle.SatelliteWithRoads;
+        MapCover.RequestedTheme = darkMap ? ElementTheme.Dark : ElementTheme.Light;
     }
+
+    private async void RevealMapOnFirstShow()
+    {
+        if (_mapRevealStarted)
+        {
+            return;
+        }
+
+        _mapRevealStarted = true;
+        await WaitForFirstMapFrameAsync();
+        MapCoverFadeOut.Begin();
+    }
+
+    /// <summary>
+    /// Waits until the map has drawn the tiles for its current view, or <see cref="MapRevealTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// WinUIEx.Maps clears to light gray (#F0F0F0) until tiles arrive and has no public
+    /// tile-loaded signal. Its internal CaptureRenderedFrameAsync waits for the current tile wave
+    /// and a completed GPU frame, so use it when present and fall back to a fixed delay otherwise.
+    /// </remarks>
+    private async Task WaitForFirstMapFrameAsync()
+    {
+        using CancellationTokenSource timeout = new(MapRevealTimeout);
+        try
+        {
+            MethodInfo? capture = typeof(MapControl).GetMethod("CaptureRenderedFrameAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (capture?.Invoke(Map, [timeout.Token]) is Task frame)
+            {
+                await frame.WaitAsync(timeout.Token);
+                return;
+            }
+
+            await Task.Delay(MapRevealFallbackDelay);
+        }
+        catch (Exception ex)
+        {
+            // Timed out (e.g. offline) or the internal API changed: reveal whatever is there.
+            System.Diagnostics.Debug.WriteLine($"Map reveal wait ended early: {ex.Message}");
+        }
+    }
+
+    private void MapCoverFadeOut_Completed(object sender, object e) => MapCover.Visibility = Visibility.Collapsed;
 
     private void UpdateHomePin()
     {
@@ -322,6 +381,33 @@ public sealed partial class RadarFlyoutWindow : WindowEx
             SettingsService.HomeLocation = p;
             UpdateHomePin();
         }
+    }
+
+    private void OnNetworkStatusChanged(object? sender, EventArgs e)
+    {
+        // Raised on a background thread; recheck right away rather than waiting for the next refresh.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_isPopupVisible)
+            {
+                _ = _radar.RefreshAsync();
+            }
+        });
+    }
+
+    private void UpdateStatus()
+    {
+        LoadingRing.IsActive = _radar.IsLoading;
+        if (_radar.LastRefreshFailed)
+        {
+            bool online = ConnectivityService.IsInternetAvailable;
+            ConnectionBar.Title = online ? "Can't reach the radar service" : "No internet connection";
+            ConnectionBar.Message = online
+                ? "NOAA radar data isn't responding. Retrying shortly."
+                : "Can't connect to the internet. Radar will update when you're back online.";
+        }
+
+        ConnectionBar.IsOpen = _radar.LastRefreshFailed;
     }
 
     private void UpdateFrameText(DateTime? timeUtc)

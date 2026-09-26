@@ -24,6 +24,7 @@ internal sealed class RadarAnimator
     private static readonly TimeSpan BufferingRetry = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan WarmUp = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan FailedRefreshRetry = TimeSpan.FromSeconds(30);
     private static readonly TileLayerBounds ConusBounds = new(-130, 20, -60, 55);
 
     private readonly MapControl _map;
@@ -33,6 +34,7 @@ internal sealed class RadarAnimator
     private int _current = -1;
     private double _opacity = SettingsService.RadarOpacity;
     private bool _refreshing;
+    private bool _buffering;
 
     public RadarAnimator(MapControl map)
     {
@@ -60,6 +62,9 @@ internal sealed class RadarAnimator
     /// <summary>Raised with the scan time (UTC; null if unknown) of the frame being displayed.</summary>
     public event EventHandler<DateTime?>? FrameChanged;
 
+    /// <summary>Raised when <see cref="IsLoading"/> or <see cref="LastRefreshFailed"/> may have changed.</summary>
+    public event EventHandler? StateChanged;
+
     public bool IsPlaying { get; private set; }
 
     public int FrameCount => _frames.Count;
@@ -68,7 +73,24 @@ internal sealed class RadarAnimator
     public int CurrentIndex => _current;
 
     /// <summary>True while playback is waiting for the next frame's tiles to load.</summary>
-    public bool IsBuffering { get; private set; }
+    public bool IsBuffering
+    {
+        get => _buffering;
+        private set
+        {
+            if (_buffering != value)
+            {
+                _buffering = value;
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>True while the frame list is being fetched or playback is buffering.</summary>
+    public bool IsLoading => _refreshing || _buffering;
+
+    /// <summary>True when the most recent attempt to fetch the frame list failed (e.g. offline).</summary>
+    public bool LastRefreshFailed { get; private set; }
 
     public double Opacity
     {
@@ -144,9 +166,11 @@ internal sealed class RadarAnimator
         }
 
         _refreshing = true;
+        StateChanged?.Invoke(this, EventArgs.Empty);
         try
         {
             IReadOnlyList<DateTime> times;
+            bool failed = false;
             try
             {
                 times = await RadarService.GetFrameTimesAsync();
@@ -154,8 +178,19 @@ internal sealed class RadarAnimator
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Radar capabilities failed: {ex.Message}");
+                failed = true;
                 times = [];
             }
+
+            if (LastRefreshFailed && !failed)
+            {
+                // Back online: rebuild every frame layer so tiles that failed while offline are
+                // requested again instead of staying blank.
+                ClearFrames();
+            }
+
+            LastRefreshFailed = failed;
+            _refreshTimer.Interval = failed ? FailedRefreshRetry : RefreshInterval;
 
             if (times.Count == 0)
             {
@@ -173,7 +208,19 @@ internal sealed class RadarAnimator
         finally
         {
             _refreshing = false;
+            StateChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void ClearFrames()
+    {
+        foreach ((_, TileLayer layer, _) in _frames)
+        {
+            _map.Layers.Remove(layer);
+        }
+
+        _frames.Clear();
+        _current = -1;
     }
 
     private void ReplaceFrames(IReadOnlyList<DateTime?> times)
