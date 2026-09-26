@@ -52,4 +52,8 @@ _ReSharper*/
 Generated\ Files/
 *_wpftmp.csproj
 
-*.resw
+# Signing certificates
+*.pfx
+
+# Holds the Azure Maps key; copy OAuth.resw.sample to create it.
+OAuth.resw
