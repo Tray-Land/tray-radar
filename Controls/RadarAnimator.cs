@@ -35,6 +35,9 @@ internal sealed class RadarAnimator
     private double _opacity = SettingsService.RadarOpacity;
     private bool _refreshing;
     private bool _buffering;
+    private bool _isActive;
+    private int _generation;
+    private DateTime _lastRefreshUtc;
 
     public RadarAnimator(MapControl map)
     {
@@ -102,12 +105,28 @@ internal sealed class RadarAnimator
         }
     }
 
-    /// <summary>Starts periodic refresh (call when the flyout opens) and loads the latest frames.</summary>
+    /// <summary>
+    /// Starts periodic refresh (call when the flyout opens), loading the latest frames right away
+    /// only if the current ones are stale.
+    /// </summary>
     public async Task ActivateAsync()
     {
-        _refreshTimer.Start();
-        await RefreshAsync();
-        if (IsPlaying)
+        _isActive = true;
+        TimeSpan age = DateTime.UtcNow - _lastRefreshUtc;
+        if (_frames.Count > 0 && !LastRefreshFailed && age < RefreshInterval)
+        {
+            // Still current: refresh when they would have gone stale; RefreshAsync restores the interval.
+            _refreshTimer.Interval = RefreshInterval - age;
+            _refreshTimer.Start();
+        }
+        else
+        {
+            _refreshTimer.Start();
+            await RefreshAsync();
+        }
+
+        // The flyout may have hidden while the refresh was in flight.
+        if (_isActive && IsPlaying)
         {
             ScheduleStep(StepInterval);
         }
@@ -116,8 +135,20 @@ internal sealed class RadarAnimator
     /// <summary>Stops all timers (call when the flyout hides).</summary>
     public void Deactivate()
     {
+        _isActive = false;
         _refreshTimer.Stop();
         _stepTimer.Stop();
+    }
+
+    /// <summary>
+    /// Stops all timers, abandons any refresh in flight, and drops every frame layer with its
+    /// tiles (call when the flyout closes for good).
+    /// </summary>
+    public void Clear()
+    {
+        Deactivate();
+        _generation++;
+        ClearFrames();
     }
 
     public void Play()
@@ -165,6 +196,7 @@ internal sealed class RadarAnimator
             return;
         }
 
+        int generation = _generation;
         _refreshing = true;
         StateChanged?.Invoke(this, EventArgs.Empty);
         try
@@ -180,6 +212,16 @@ internal sealed class RadarAnimator
                 System.Diagnostics.Debug.WriteLine($"Radar capabilities failed: {ex.Message}");
                 failed = true;
                 times = [];
+            }
+
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            if (!failed)
+            {
+                _lastRefreshUtc = DateTime.UtcNow;
             }
 
             if (LastRefreshFailed && !failed)
@@ -208,7 +250,10 @@ internal sealed class RadarAnimator
         finally
         {
             _refreshing = false;
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            if (generation == _generation)
+            {
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 

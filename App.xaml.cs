@@ -15,6 +15,7 @@ public partial class App : Application
 {
     private const string MutexName = "Local\\TrayRadar_SingleInstance";
     private const string ShowEventName = "Local\\TrayRadar_ShowFlyout";
+    private static readonly TimeSpan IdleCollectDelay = TimeSpan.FromSeconds(5);
 
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _showEvent;
@@ -23,6 +24,7 @@ public partial class App : Application
     private OnboardingWindow? _onboarding;
     private SettingsWindow? _settings;
     private DispatcherQueue? _dispatcher;
+    private bool _isExiting;
 
     public App()
     {
@@ -89,7 +91,11 @@ public partial class App : Application
         if (_settings is null)
         {
             _settings = new SettingsWindow();
-            _settings.Closed += (_, _) => _settings = null;
+            _settings.Closed += (_, _) =>
+            {
+                _settings = null;
+                ReleaseIdleResourcesIfNoWindows();
+            };
         }
 
         _settings.Activate();
@@ -150,7 +156,21 @@ public partial class App : Application
         flyout.ShowPopup();
     }
 
-    private RadarFlyoutWindow EnsureFlyout() => _flyout ??= new RadarFlyoutWindow();
+    private RadarFlyoutWindow EnsureFlyout()
+    {
+        if (_flyout is null)
+        {
+            // The flyout closes itself after staying hidden for a while; the next open builds a new one.
+            _flyout = new RadarFlyoutWindow();
+            _flyout.Closed += (_, _) =>
+            {
+                _flyout = null;
+                ReleaseIdleResourcesIfNoWindows();
+            };
+        }
+
+        return _flyout;
+    }
 
     private void ShowOnboarding()
     {
@@ -158,16 +178,47 @@ public partial class App : Application
         {
             _onboarding = new OnboardingWindow();
             _onboarding.Completed += (_, _) => _dispatcher?.TryEnqueue(ShowFlyoutOrOnboarding);
-            _onboarding.Closed += (_, _) => _onboarding = null;
+            _onboarding.Closed += (_, _) =>
+            {
+                _onboarding = null;
+                ReleaseIdleResourcesIfNoWindows();
+            };
         }
 
         _onboarding.Activate();
         _onboarding.BringToFront();
     }
 
+    private void ReleaseIdleResourcesIfNoWindows()
+    {
+        if (_flyout is null && _settings is null && _onboarding is null && !_isExiting)
+        {
+            ReleaseIdleResources();
+        }
+    }
+
+    private static void ReleaseIdleResources()
+    {
+        ZipLookupService.Unload();
+
+        // An idle tray app allocates almost nothing, so the GC won't run on its own and the closed
+        // window's memory never goes back to Windows. Wait for WinUI to finish tearing the window
+        // down first, or its objects are still referenced and just get promoted. Then run finalizers
+        // (the map renderer frees its Direct3D device in one) and collect what they released. Off
+        // the UI thread because some finalizers may need to reach it.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(IdleCollectDelay);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        });
+    }
+
     private void ExitApp()
     {
-        _flyout?.CloseForExit();
+        _isExiting = true;
+        _flyout?.CloseWindow();
         _settings?.Close();
         _onboarding?.Close();
 

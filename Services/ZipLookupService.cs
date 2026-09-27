@@ -25,6 +25,21 @@ internal static class ZipLookupService
         return table.TryGetValue(zip, out (double, double) point) ? point : null;
     }
 
+    /// <summary>
+    /// Drops the in-memory table (call when no window can look up a ZIP). The next lookup reloads
+    /// it from disk. Does nothing while a load is running.
+    /// </summary>
+    public static void Unload()
+    {
+        if (!s_loadLock.Wait(0))
+        {
+            return;
+        }
+
+        s_table = null;
+        s_loadLock.Release();
+    }
+
     private static async Task<Dictionary<string, (double, double)>> EnsureLoadedAsync()
     {
         if (s_table is not null)

@@ -25,8 +25,9 @@ using MapIcon = WinUIEx.Maps.MapIcon;
 namespace TrayRadar.Views;
 
 /// <summary>
-/// Borderless radar popup shown next to the tray icon. It is created once and then shown/hidden
-/// so the map and its tile cache stay warm, and it light-dismisses when focus leaves.
+/// Borderless radar popup shown next to the tray icon. Dismissing only hides it, so reopening soon
+/// after is instant; after <see cref="CloseDelay"/> hidden it closes for real, releasing the map and
+/// its tiles, and the next open builds a new window. It light-dismisses when focus leaves.
 /// </summary>
 public sealed partial class RadarFlyoutWindow : WindowEx
 {
@@ -34,13 +35,18 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private const int PopupHeight = 520;
     private static readonly TimeSpan RecentDismissWindow = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan DeviceLocationRefresh = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CloseDelay = TimeSpan.FromMinutes(1);
 
     // The first open keeps the map covered until its first tiles are drawn (see WaitForFirstMapFrameAsync).
     private static readonly TimeSpan MapRevealTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan MapRevealFallbackDelay = TimeSpan.FromMilliseconds(2500);
 
+    // Static so rebuilding the window doesn't re-query the device location on every open.
+    private static DateTime s_lastDeviceLocationUtc;
+
     private readonly HWND _hwnd;
     private readonly DispatcherQueueTimer _hideTimer;
+    private readonly DispatcherQueueTimer _closeTimer;
     private readonly DispatcherQueueTimer _savedTickTimer;
     private readonly RadarAnimator _radar;
     private readonly MapElementsLayer _pinLayer = new();
@@ -48,10 +54,10 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private bool _isPopupVisible;
     private bool _isShowing;
     private bool _allowClose;
+    private bool _isClosed;
     private bool _syncingFrameSlider;
     private bool _mapRevealStarted;
     private DateTime _lastDismissedAtUtc;
-    private DateTime _lastDeviceLocationUtc;
 
     public RadarFlyoutWindow()
     {
@@ -68,10 +74,15 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _hideTimer.IsRepeating = false;
         _hideTimer.Tick += (_, _) => HideIfFocusLeftWindow();
 
+        _closeTimer = DispatcherQueue.CreateTimer();
+        _closeTimer.Interval = CloseDelay;
+        _closeTimer.IsRepeating = false;
+        _closeTimer.Tick += (_, _) => CloseIfStillHidden();
+
         _savedTickTimer = DispatcherQueue.CreateTimer();
         _savedTickTimer.Interval = TimeSpan.FromSeconds(1.5);
         _savedTickTimer.IsRepeating = false;
-        _savedTickTimer.Tick += (_, _) => SaveViewIcon.Glyph = "";
+        _savedTickTimer.Tick += (_, _) => ResetSaveViewIcon();
 
         string? key = Secrets.AzureMapsKey;
         if (key is null)
@@ -117,6 +128,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     {
         WindowPlacementService.PositionNearTray(this, PopupWidth, PopupHeight);
         _hideTimer.Stop();
+        _closeTimer.Stop();
         _isShowing = true;
         _isPopupVisible = true;
 
@@ -130,7 +142,10 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         RevealMapOnFirstShow();
 
         await _radar.ActivateAsync();
-        RefreshDeviceLocationIfStale();
+        if (!_isClosed)
+        {
+            RefreshDeviceLocationIfStale();
+        }
     }
 
     public void HidePopup()
@@ -143,17 +158,37 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _isPopupVisible = false;
         _lastDismissedAtUtc = DateTime.UtcNow;
         _hideTimer.Stop();
+        _savedTickTimer.Stop();
+        ResetSaveViewIcon();
         _radar.Deactivate();
         AppWindow.Hide();
+
+        _closeTimer.Stop();
+        _closeTimer.Start();
     }
 
-    /// <summary>Closes the window for real (app exit).</summary>
-    public void CloseForExit()
+    /// <summary>
+    /// Closes the window for real: stops its timers, abandons async work in flight, and
+    /// unsubscribes from app-lifetime events so nothing keeps the window or its map alive.
+    /// </summary>
+    public void CloseWindow()
     {
-        _allowClose = true;
+        if (_isClosed)
+        {
+            return;
+        }
+
+        HidePopup();
+        _isClosed = true;
+        _closeTimer.Stop();
+        _radar.Clear();
+
         SettingsService.MapSettingsChanged -= OnMapSettingsChanged;
         ConnectivityService.NetworkStatusChanged -= OnNetworkStatusChanged;
-        _radar.Deactivate();
+        Activated -= OnWindowActivated;
+        AppWindow.Closing -= OnAppWindowClosing;
+
+        _allowClose = true;
         Close();
     }
 
@@ -201,6 +236,14 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         // Debounce: focus can bounce briefly while XAML popups (tooltips, menus) open.
         _hideTimer.Stop();
         _hideTimer.Start();
+    }
+
+    private void CloseIfStillHidden()
+    {
+        if (!_isPopupVisible)
+        {
+            CloseWindow();
+        }
     }
 
     private void HideIfFocusLeftWindow()
@@ -256,6 +299,8 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _savedTickTimer.Start();
     }
 
+    private void ResetSaveViewIcon() => SaveViewIcon.Glyph = "";
+
     private void OnMapSettingsChanged(object? sender, EventArgs e)
     {
         ApplyMapStyle();
@@ -300,7 +345,10 @@ public sealed partial class RadarFlyoutWindow : WindowEx
 
         _mapRevealStarted = true;
         await WaitForFirstMapFrameAsync();
-        MapCoverFadeOut.Begin();
+        if (!_isClosed)
+        {
+            MapCoverFadeOut.Begin();
+        }
     }
 
     /// <summary>
@@ -368,18 +416,21 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private async void RefreshDeviceLocationIfStale()
     {
         if (SettingsService.LocationMode != LocationMode.Device
-            || DateTime.UtcNow - _lastDeviceLocationUtc < DeviceLocationRefresh)
+            || DateTime.UtcNow - s_lastDeviceLocationUtc < DeviceLocationRefresh)
         {
             return;
         }
 
-        _lastDeviceLocationUtc = DateTime.UtcNow;
+        s_lastDeviceLocationUtc = DateTime.UtcNow;
         (double Lat, double Lon)? point = await LocationService.TryGetDeviceLocationAsync(TimeSpan.FromSeconds(10));
         if (point is { } p && LocationService.IsInConus(p.Lat, p.Lon))
         {
             // Only the pin moves; the saved default view is the user's choice.
             SettingsService.HomeLocation = p;
-            UpdateHomePin();
+            if (!_isClosed)
+            {
+                UpdateHomePin();
+            }
         }
     }
 
