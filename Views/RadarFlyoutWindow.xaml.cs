@@ -1,3 +1,4 @@
+using System.Drawing.Imaging;
 using System.Reflection;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -10,8 +11,10 @@ using Microsoft.UI.Xaml.Media;
 using TrayRadar.Controls;
 using TrayRadar.Services;
 using Windows.Devices.Geolocation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Win32;
+using Windows.Storage.Streams;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.UI.WindowsAndMessaging;
@@ -48,6 +51,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private readonly DispatcherQueueTimer _hideTimer;
     private readonly DispatcherQueueTimer _closeTimer;
     private readonly DispatcherQueueTimer _savedTickTimer;
+    private readonly DispatcherQueueTimer _copiedTickTimer;
     private readonly RadarAnimator _radar;
     private readonly MapElementsLayer _pinLayer = new();
     private MapIcon? _homePin;
@@ -83,6 +87,11 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _savedTickTimer.Interval = TimeSpan.FromSeconds(1.5);
         _savedTickTimer.IsRepeating = false;
         _savedTickTimer.Tick += (_, _) => ResetSaveViewIcon();
+
+        _copiedTickTimer = DispatcherQueue.CreateTimer();
+        _copiedTickTimer.Interval = TimeSpan.FromSeconds(1.5);
+        _copiedTickTimer.IsRepeating = false;
+        _copiedTickTimer.Tick += (_, _) => SetCopyConfirmed(false);
 
         string? key = Secrets.AzureMapsKey;
         if (key is null)
@@ -160,6 +169,8 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _hideTimer.Stop();
         _savedTickTimer.Stop();
         ResetSaveViewIcon();
+        _copiedTickTimer.Stop();
+        SetCopyConfirmed(false);
         _radar.Deactivate();
         AppWindow.Hide();
 
@@ -538,6 +549,69 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         await GoToDefaultViewAsync(MapAnimationKind.Default);
 
     private void SaveViewButton_Click(object sender, RoutedEventArgs e) => SaveCurrentViewAsDefault();
+
+    private async void CopyImageButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await CopyMapImageToClipboardAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Copy as image failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Copies what the user sees (map + radar, without the toolbar) to the clipboard as a PNG.
+    /// The map is GPU-rendered and invisible to RenderTargetBitmap, so the window is read from the screen.
+    /// </summary>
+    private async Task CopyMapImageToClipboardAsync()
+    {
+        // Hide the toolbar overlay and let the compositor present a frame without it.
+        Overlay.Opacity = 0;
+        try
+        {
+            await Task.Delay(120);
+
+            System.Drawing.Point origin = default;
+            PInvoke.ClientToScreen(_hwnd, ref origin);
+            Windows.Graphics.SizeInt32 size = AppWindow.ClientSize;
+
+            using System.Drawing.Bitmap bitmap = new(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                g.CopyFromScreen(origin.X, origin.Y, 0, 0, new System.Drawing.Size(size.Width, size.Height));
+            }
+
+            InMemoryRandomAccessStream stream = new();
+            using (MemoryStream png = new())
+            {
+                bitmap.Save(png, ImageFormat.Png);
+                Stream output = stream.AsStreamForWrite();
+                await output.WriteAsync(png.ToArray());
+                await output.FlushAsync();
+            }
+
+            DataPackage package = new();
+            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            SetCopyConfirmed(true);
+            _copiedTickTimer.Stop();
+            _copiedTickTimer.Start();
+        }
+        finally
+        {
+            Overlay.Opacity = 1;
+        }
+    }
+
+    private void SetCopyConfirmed(bool confirmed)
+    {
+        CopyIcon.Opacity = confirmed ? 0 : 1;
+        CopiedIcon.Opacity = confirmed ? 1 : 0;
+    }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => App.Current.ShowSettings();
 

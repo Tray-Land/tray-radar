@@ -13,3 +13,4 @@ SHAppBarMessage
 Shell_NotifyIconGetRect
 AllowSetForegroundWindow
 RegNotifyChangeKeyValue
+ClientToScreen

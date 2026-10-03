@@ -11,7 +11,10 @@
         <MicaBackdrop />
     </ex:WindowEx.SystemBackdrop>
 
-    <Grid x:Name="Root" KeyboardAcceleratorPlacementMode="Hidden">
+    <Grid
+        x:Name="Root"
+        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+        KeyboardAcceleratorPlacementMode="Hidden">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="Escape" Invoked="Escape_Invoked" />
         </Grid.KeyboardAccelerators>
@@ -37,7 +40,11 @@
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
             IsHitTestVisible="False" />
 
-        <StackPanel Margin="8" VerticalAlignment="Top" Spacing="6">
+        <StackPanel
+            x:Name="Overlay"
+            Margin="8"
+            VerticalAlignment="Top"
+            Spacing="6">
             <!--  Toolbar  -->
             <Border
                 Padding="12,4,4,4"
@@ -48,6 +55,7 @@
                 <Grid ColumnSpacing="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -103,6 +111,29 @@
                     </Button>
                     <Button
                         Grid.Column="4"
+                        AutomationProperties.Name="Copy map as image"
+                        Click="CopyImageButton_Click"
+                        Style="{StaticResource ToolbarButtonStyle}"
+                        ToolTipService.ToolTip="Copy as image">
+                        <Grid>
+                            <PathIcon x:Name="CopyIcon" Data="F1 M1.383,2.762 C0.945,3.025 0.601,3.383 0.353,3.836 C0.105,4.289 -0.005,4.763 0.024,5.260 L0.024,11.222 C0.024,12.069 0.236,12.866 0.660,13.611 C1.084,14.356 1.661,14.941 2.391,15.364 C3.122,15.788 3.926,16.000 4.802,16.000 L10.720,16.000 C11.246,16.000 11.728,15.876 12.167,15.627 C12.605,15.379 12.956,15.050 13.219,14.641 L4.802,14.641 C3.867,14.641 3.063,14.305 2.391,13.633 C1.719,12.961 1.383,12.157 1.383,11.222 Z M5.241,0.000 C4.422,0.000 3.728,0.292 3.158,0.877 C2.589,1.461 2.304,2.163 2.304,2.981 L2.304,10.740 C2.304,11.558 2.589,12.259 3.158,12.844 C3.728,13.428 4.422,13.721 5.241,13.721 L13.000,13.721 C13.818,13.721 14.519,13.428 15.104,12.844 C15.688,12.259 15.980,11.558 15.980,10.740 L15.980,2.981 C15.980,2.163 15.688,1.461 15.104,0.877 C14.519,0.292 13.818,0.000 13.000,0.000 Z M9.537,8.373 L9.624,8.416 L13.526,12.274 C13.379,12.332 13.204,12.362 13.000,12.362 L5.241,12.362 C5.065,12.362 4.890,12.332 4.715,12.274 L8.660,8.416 C8.777,8.329 8.916,8.278 9.076,8.263 C9.237,8.248 9.390,8.285 9.537,8.373 Z M5.241,1.403 L13.000,1.403 C13.438,1.403 13.818,1.556 14.139,1.863 C14.461,2.170 14.621,2.542 14.621,2.981 L14.621,10.740 C14.621,10.944 14.592,11.134 14.534,11.310 L10.589,7.452 C10.209,7.101 9.756,6.911 9.230,6.882 C8.704,6.853 8.236,7.014 7.827,7.364 L3.750,11.310 C3.692,11.134 3.663,10.944 3.663,10.740 L3.663,2.981 C3.663,2.542 3.816,2.170 4.123,1.863 C4.430,1.556 4.802,1.403 5.241,1.403 Z M6.863,3.463 C6.395,3.434 6.052,3.616 5.832,4.011 C5.613,4.405 5.613,4.793 5.832,5.173 C6.052,5.553 6.395,5.742 6.863,5.742 C7.155,5.713 7.411,5.589 7.630,5.370 C7.849,5.151 7.958,4.888 7.958,4.581 C7.958,4.274 7.849,4.011 7.630,3.792 C7.411,3.573 7.155,3.463 6.863,3.463 Z">
+                                <PathIcon.OpacityTransition>
+                                    <ScalarTransition />
+                                </PathIcon.OpacityTransition>
+                            </PathIcon>
+                            <FontIcon
+                                x:Name="CopiedIcon"
+                                FontSize="16"
+                                Glyph="&#xE73E;"
+                                Opacity="0">
+                                <FontIcon.OpacityTransition>
+                                    <ScalarTransition />
+                                </FontIcon.OpacityTransition>
+                            </FontIcon>
+                        </Grid>
+                    </Button>
+                    <Button
+                        Grid.Column="5"
                         AutomationProperties.Name="Settings"
                         Click="SettingsButton_Click"
                         Style="{StaticResource ToolbarButtonStyle}"
