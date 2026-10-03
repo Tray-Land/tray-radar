@@ -11,7 +11,7 @@
   <Identity
     Name="Tray-Radar"
     Publisher="CN=Joseph Finney, O=Joseph Finney, L=Milwaukee, S=Wisconsin, C=US, PostalCode=53212"
-    Version="1.0.1.0" />
+    Version="1.1.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="C5F9AB76-1475-443E-B9B7-4EC02C17C326" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
