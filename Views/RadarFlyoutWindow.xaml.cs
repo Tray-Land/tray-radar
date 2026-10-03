@@ -334,6 +334,16 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         // Match the cover to the basemap's overall tone so the reveal doesn't flash either way.
         bool darkMap = Map.MapStyle is MapStyle.Night or MapStyle.GrayscaleDark or MapStyle.SatelliteWithRoads;
         MapCover.RequestedTheme = darkMap ? ElementTheme.Dark : ElementTheme.Light;
+
+        // A style change makes the map clear to light gray again, so cover it until tiles redraw.
+        if (_mapRevealStarted)
+        {
+            _mapRevealStarted = false;
+            MapCoverFadeOut.Stop();
+            MapCover.Opacity = 1;
+            MapCover.Visibility = Visibility.Visible;
+            RevealMapOnFirstShow();
+        }
     }
 
     private async void RevealMapOnFirstShow()
