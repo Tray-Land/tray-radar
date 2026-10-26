@@ -27,6 +27,11 @@
     <Content Remove="Assets\Sweeps*.png" />
     <Content Include="Assets\*.ico" />
     <Content Include="Assets\Data\zcta.csv" />
+    <!-- Release builds (build-msix-for-gh.ps1) package the App Installer feed so the app keeps updating itself. -->
+    <Content Include="$(ReleaseAppInstallerPath)" Condition="'$(ReleaseAppInstallerPath)' != ''">
+      <Link>Update.appinstaller</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
