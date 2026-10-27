@@ -16,7 +16,7 @@ Tray Radar is a WinUI 3 app that lives in the Windows notification area. It has 
 - **Default view:** the pin button saves the current view as the one the flyout opens to. The home button returns to that view. Every open starts at the default view.
 - **Light dismiss:** the flyout hides when it loses focus, and clicking the tray icon again toggles it.
 - **Tray menu:** right-click the icon for Open radar, Settings, and Exit.
-- **Settings:** location, basemap style, radar opacity, showing a pin at your location, resetting the default view, and Start with Windows.
+- **Settings:** location, basemap style, radar opacity, showing a pin at your location, resetting the default view, and Start with Windows. Settings open as a page inside the flyout (Escape or the back button returns to the map), and About shows the app version.
 - **Theme-aware tray icon:** a dark glyph on a light taskbar and a white glyph on a dark one. The icon follows the Windows (taskbar) theme, not the app theme, and switches live.
 - **Single instance:** launching the app again opens the running instance's flyout instead of adding a second tray icon.
 - **Offline handling:** when radar data can't be fetched, the flyout says so and retries every 30 seconds. When the connection returns, the frame layers are rebuilt so tiles that failed while offline load again.
@@ -72,7 +72,7 @@ dotnet build -c Debug -p:Platform=$Platform
 | `App.xaml.cs` | Tray icon, context menu, single-instance mutex and "show flyout" event, crash logging |
 | `Views/RadarFlyoutWindow` | The flyout: map, toolbar, frame slider, light dismiss, status messages |
 | `Views/OnboardingWindow` | First-run location prompt |
-| `Views/SettingsWindow` | Location, map, startup, and About settings |
+| `Views/SettingsPage` | Settings page shown inside the flyout: location, map, startup, and About (with the app version) |
 | `Controls/LocationPicker` | Shared "device location or ZIP code" control used by onboarding and settings |
 | `Controls/RadarAnimator.cs` | One tile layer per radar scan, loop playback, frame prefetch, periodic refresh |
 | `Services/RadarService.cs` | Reads scan times from the WMS capabilities and builds tile URLs |

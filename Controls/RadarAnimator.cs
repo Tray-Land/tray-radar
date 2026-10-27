@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.UI.Dispatching;
 using TrayRadar.Services;
 using WinUIEx.Maps;
@@ -23,6 +24,8 @@ internal sealed class RadarAnimator
     private static readonly TimeSpan LastFrameHold = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan BufferingRetry = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan WarmUp = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan TileLoadTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan TileLoadFallbackDelay = TimeSpan.FromMilliseconds(2500);
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan FailedRefreshRetry = TimeSpan.FromSeconds(30);
     private static readonly TileLayerBounds ConusBounds = new(-130, 20, -60, 55);
@@ -164,7 +167,17 @@ internal sealed class RadarAnimator
         ScheduleStep(StepInterval);
     }
 
+    /// <summary>Stops playback, staying on the frame currently shown.</summary>
     public void Pause()
+    {
+        IsPlaying = false;
+        IsBuffering = false;
+        _stepTimer.Stop();
+        ApplyVisibility();
+    }
+
+    /// <summary>Stops playback and returns to the newest frame.</summary>
+    public void Stop()
     {
         IsPlaying = false;
         IsBuffering = false;
@@ -241,11 +254,17 @@ internal sealed class RadarAnimator
                 {
                     ReplaceFrames([null]);
                 }
-
-                return;
+            }
+            else
+            {
+                ReplaceFrames(times.Select(t => (DateTime?)t).ToList());
             }
 
-            ReplaceFrames(times.Select(t => (DateTime?)t).ToList());
+            // Stay "loading" until the map has actually drawn the radar tiles, not just the frame list.
+            if (!failed)
+            {
+                await WaitForTilesAsync(_map, TileLoadTimeout, TileLoadFallbackDelay);
+            }
         }
         finally
         {
@@ -254,6 +273,35 @@ internal sealed class RadarAnimator
             {
                 StateChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+    }
+
+    /// <summary>
+    /// Waits until the map has drawn the tiles for its current view, or <paramref name="timeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// WinUIEx.Maps has no public tile-loaded signal. Its internal CaptureRenderedFrameAsync waits
+    /// for the current tile wave and a completed GPU frame, so use it when present and fall back to
+    /// a fixed delay otherwise.
+    /// </remarks>
+    internal static async Task WaitForTilesAsync(MapControl map, TimeSpan timeout, TimeSpan fallbackDelay)
+    {
+        using CancellationTokenSource cts = new(timeout);
+        try
+        {
+            MethodInfo? capture = typeof(MapControl).GetMethod("CaptureRenderedFrameAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (capture?.Invoke(map, [cts.Token]) is Task frame)
+            {
+                await frame.WaitAsync(cts.Token);
+                return;
+            }
+
+            await Task.Delay(fallbackDelay);
+        }
+        catch (Exception ex)
+        {
+            // Timed out (e.g. offline) or the internal API changed: stop waiting on whatever is there.
+            System.Diagnostics.Debug.WriteLine($"Map tile wait ended early: {ex.Message}");
         }
     }
 
@@ -314,7 +362,7 @@ internal sealed class RadarAnimator
 
         if (_frames.Count < 2 && IsPlaying)
         {
-            Pause();
+            Stop();
             return;
         }
 

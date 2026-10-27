@@ -1,5 +1,4 @@
 using System.Drawing.Imaging;
-using System.Reflection;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -55,11 +54,13 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private readonly RadarAnimator _radar;
     private readonly MapElementsLayer _pinLayer = new();
     private MapIcon? _homePin;
+    private SettingsPage? _settingsPage;
     private bool _isPopupVisible;
     private bool _isShowing;
     private bool _allowClose;
     private bool _isClosed;
     private bool _syncingFrameSlider;
+    private bool _scrubberOpen;
     private bool _mapRevealStarted;
     private DateTime _lastDismissedAtUtc;
 
@@ -130,7 +131,41 @@ public sealed partial class RadarFlyoutWindow : WindowEx
             return;
         }
 
+        ShowMainPage();
         ShowPopup();
+    }
+
+    public bool IsPopupVisible => _isPopupVisible;
+
+    public bool IsShowingSettings => _settingsPage is { Visibility: Visibility.Visible };
+
+    /// <summary>Covers the map with the settings page; the radar stops refreshing while it is up.</summary>
+    public void ShowSettingsPage()
+    {
+        if (_settingsPage is null)
+        {
+            _settingsPage = new SettingsPage(ShowMainPage);
+            Root.Children.Add(_settingsPage);
+        }
+
+        _settingsPage.Visibility = Visibility.Visible;
+        _settingsPage.OnShown();
+        _radar.Deactivate();
+    }
+
+    public void ShowMainPage()
+    {
+        if (!IsShowingSettings)
+        {
+            return;
+        }
+
+        _settingsPage!.Visibility = Visibility.Collapsed;
+        if (_isPopupVisible)
+        {
+            Map.Focus(FocusState.Programmatic);
+            _ = _radar.ActivateAsync();
+        }
     }
 
     public async void ShowPopup()
@@ -147,9 +182,15 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         AppWindow.Show(true);
         Activate();
         PInvoke.SetForegroundWindow(_hwnd);
-        Map.Focus(FocusState.Programmatic);
         RevealMapOnFirstShow();
 
+        if (IsShowingSettings)
+        {
+            _settingsPage!.OnShown();
+            return;
+        }
+
+        Map.Focus(FocusState.Programmatic);
         await _radar.ActivateAsync();
         if (!_isClosed)
         {
@@ -193,6 +234,12 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         _isClosed = true;
         _closeTimer.Stop();
         _radar.Clear();
+
+        if (_settingsPage is not null)
+        {
+            Root.Children.Remove(_settingsPage);
+            _settingsPage = null;
+        }
 
         SettingsService.MapSettingsChanged -= OnMapSettingsChanged;
         ConnectivityService.NetworkStatusChanged -= OnNetworkStatusChanged;
@@ -372,34 +419,9 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         }
     }
 
-    /// <summary>
-    /// Waits until the map has drawn the tiles for its current view, or <see cref="MapRevealTimeout"/>.
-    /// </summary>
-    /// <remarks>
-    /// WinUIEx.Maps clears to light gray (#F0F0F0) until tiles arrive and has no public
-    /// tile-loaded signal. Its internal CaptureRenderedFrameAsync waits for the current tile wave
-    /// and a completed GPU frame, so use it when present and fall back to a fixed delay otherwise.
-    /// </remarks>
-    private async Task WaitForFirstMapFrameAsync()
-    {
-        using CancellationTokenSource timeout = new(MapRevealTimeout);
-        try
-        {
-            MethodInfo? capture = typeof(MapControl).GetMethod("CaptureRenderedFrameAsync", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (capture?.Invoke(Map, [timeout.Token]) is Task frame)
-            {
-                await frame.WaitAsync(timeout.Token);
-                return;
-            }
-
-            await Task.Delay(MapRevealFallbackDelay);
-        }
-        catch (Exception ex)
-        {
-            // Timed out (e.g. offline) or the internal API changed: reveal whatever is there.
-            System.Diagnostics.Debug.WriteLine($"Map reveal wait ended early: {ex.Message}");
-        }
-    }
+    // WinUIEx.Maps clears to light gray (#F0F0F0) until tiles arrive, so wait for the first frame.
+    private Task WaitForFirstMapFrameAsync() =>
+        RadarAnimator.WaitForTilesAsync(Map, MapRevealTimeout, MapRevealFallbackDelay);
 
     private void MapCoverFadeOut_Completed(object sender, object e) => MapCover.Visibility = Visibility.Collapsed;
 
@@ -505,7 +527,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private void UpdateFrameSlider()
     {
         int count = _radar.FrameCount;
-        bool show = count > 1 && (_radar.IsPlaying || _radar.CurrentIndex != count - 1);
+        bool show = count > 1 && _scrubberOpen;
         FrameScrubber.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show)
         {
@@ -528,8 +550,9 @@ public sealed partial class RadarFlyoutWindow : WindowEx
 
     private void HideScrubberButton_Click(object sender, RoutedEventArgs e)
     {
-        // Pausing returns to the newest frame, which hides the scrubber.
-        _radar.Pause();
+        // Only this button closes the scrubber; it also returns to the newest frame.
+        _scrubberOpen = false;
+        _radar.Stop();
         Map.Focus(FocusState.Programmatic);
     }
 
@@ -541,6 +564,7 @@ public sealed partial class RadarFlyoutWindow : WindowEx
         }
         else
         {
+            _scrubberOpen = true;
             _radar.Play();
         }
     }
@@ -618,6 +642,13 @@ public sealed partial class RadarFlyoutWindow : WindowEx
     private void Escape_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
-        HidePopup();
+        if (IsShowingSettings)
+        {
+            ShowMainPage();
+        }
+        else
+        {
+            HidePopup();
+        }
     }
 }

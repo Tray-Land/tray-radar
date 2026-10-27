@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TrayRadar.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:TrayRadar.Controls"
+    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+
+    <Grid RowSpacing="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Header  -->
+        <StackPanel
+            Margin="8,8,8,0"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button
+                x:Name="BackButton"
+                AutomationProperties.Name="Back"
+                Click="BackButton_Click"
+                Style="{StaticResource ToolbarButtonStyle}"
+                ToolTipService.ToolTip="Back">
+                <FontIcon FontSize="16" Glyph="&#xE72B;" />
+            </Button>
+            <TextBlock
+                VerticalAlignment="Center"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="Settings" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Padding="20,8,20,20" Spacing="8">
+
+                <!--  Location  -->
+                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Location" />
+                <TextBlock
+                    x:Name="CurrentLocationText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+                <controls:LocationPicker LocationChosen="Picker_LocationChosen" />
+
+                <!--  Map  -->
+                <TextBlock
+                    Margin="0,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="Map" />
+                <ComboBox
+                    x:Name="StyleBox"
+                    MinWidth="220"
+                    Header="Basemap style"
+                    SelectionChanged="StyleBox_SelectionChanged">
+                    <ComboBoxItem Content="Match Windows theme" Tag="Auto" />
+                    <ComboBoxItem Content="Road" Tag="Road" />
+                    <ComboBoxItem Content="Night" Tag="Night" />
+                    <ComboBoxItem Content="Grayscale" Tag="Grayscale" />
+                    <ComboBoxItem Content="Satellite" Tag="Satellite" />
+                </ComboBox>
+                <Slider
+                    x:Name="OpacitySlider"
+                    Header="Radar opacity"
+                    Maximum="100"
+                    Minimum="10"
+                    StepFrequency="5"
+                    ValueChanged="OpacitySlider_ValueChanged" />
+                <ToggleSwitch
+                    x:Name="LocationPinToggle"
+                    Header="Show my location on the map"
+                    Toggled="LocationPinToggle_Toggled" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Click="ResetViewButton_Click" Content="Reset default view" />
+                    <TextBlock
+                        x:Name="ResetDoneText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!--  General  -->
+                <TextBlock
+                    Margin="0,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="General" />
+                <ToggleSwitch
+                    x:Name="StartupToggle"
+                    Header="Start with Windows"
+                    Toggled="StartupToggle_Toggled" />
+                <TextBlock
+                    x:Name="StartupStatusText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+
+                <!--  About  -->
+                <TextBlock
+                    Margin="0,16,0,0"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    Text="About" />
+                <TextBlock
+                    x:Name="VersionText"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextWrapping="Wrap">
+                    <Run Text="Tray Radar covers the contiguous United States only." />
+                    <LineBreak />
+                    <Run Text="Radar data: NOAA / National Weather Service (the same mosaic as radar.weather.gov)." />
+                    <LineBreak />
+                    <Run Text="Basemap: Azure Maps. ZIP code locations: US Census Bureau ZCTA Gazetteer." />
+                    <LineBreak />
+                    <Run Text="Map control: WinUIEx.Maps by Morten Nielsen." />
+                </TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

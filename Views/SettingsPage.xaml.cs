@@ -4,27 +4,51 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using TrayRadar.Controls;
 using TrayRadar.Services;
 using Windows.ApplicationModel;
-using WinUIEx;
 
 namespace TrayRadar.Views;
 
-public sealed partial class SettingsWindow : WindowEx
+/// <summary>Settings shown inside the radar flyout, over the map. Changes apply immediately.</summary>
+public sealed partial class SettingsPage : Page
 {
+    private readonly Action _goBack;
     private bool _loading = true;
 
-    public SettingsWindow()
+    public SettingsPage(Action goBack)
     {
+        _goBack = goBack;
         InitializeComponent();
-        AppWindow.SetIcon("Assets/AppIcon.ico");
-        WindowPlacementService.CenterOnPrimary(this, 480, 680);
 
+        VersionText.Text = $"Tray Radar {GetVersionText()}";
         UpdateCurrentLocationText();
         StyleBox.SelectedIndex = (int)SettingsService.BasemapStyle;
         OpacitySlider.Value = Math.Round(SettingsService.RadarOpacity * 100);
         LocationPinToggle.IsOn = SettingsService.ShowLocationPin;
-        _ = LoadStartupStateAsync();
         _loading = false;
     }
+
+    /// <summary>Re-reads state that can change outside the app (startup may be toggled in Windows Settings).</summary>
+    public void OnShown()
+    {
+        ResetDoneText.Text = string.Empty;
+        _ = LoadStartupStateAsync();
+        BackButton.Focus(FocusState.Programmatic);
+    }
+
+    private static string GetVersionText()
+    {
+        try
+        {
+            PackageVersion v = Package.Current.Id.Version;
+            return $"version {v.Major}.{v.Minor}.{v.Build}";
+        }
+        catch (InvalidOperationException)
+        {
+            // Not running with package identity.
+            return $"version {typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "unknown"}";
+        }
+    }
+
+    private void BackButton_Click(object sender, RoutedEventArgs e) => _goBack();
 
     private void UpdateCurrentLocationText()
     {
