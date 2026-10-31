@@ -666,7 +666,7 @@ try {
         throw 'The dotnet SDK is required but was not found on PATH.'
     }
 
-    # The publish profiles are git-ignored (*.pubxml), so a fresh clone won't have them.
+    # The publish profiles are committed (win-x64.pubxml, win-arm64.pubxml); an older clone may lack them.
     foreach ($build in $builds) {
         $profilePath = Join-Path $publishProfilesRoot $build.PublishProfile
         if (-not (Test-Path -LiteralPath $profilePath)) {
