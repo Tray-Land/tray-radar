@@ -23,6 +23,8 @@ Tray Radar is a WinUI 3 app that lives in the Windows notification area. It has 
 
 ## Install
 
+[<img src="docs/MSIX.svg" alt="Install TrayRadar (MSIX)" width="212">](https://github.com/TheJoeFin/tray-radar/releases/latest/download/TrayRadar.appinstaller)
+
 Download [TrayRadar.appinstaller](https://github.com/TheJoeFin/tray-radar/releases/latest/download/TrayRadar.appinstaller) and open it. Windows installs the right version for your PC (x64 or ARM64), plus the Windows App Runtime if it's missing, and keeps Tray Radar up to date: it checks for a new release when the app starts and in the background.
 
 - Requires Windows 10 1809 (build 17763) or later, x64 or ARM64.
